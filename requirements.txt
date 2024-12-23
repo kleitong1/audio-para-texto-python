@@ -1,0 +1,5 @@
+# Utilize o comando pip install -r requirements.txt em seu terminal para instalar todas as dependências necessárias para o projeto. Lembre-se de ter o pip instalado em sua máquina.
+
+speechrecognition==3.8.1
+pydub==0.25.1
+ffmpeg-python==0.2.0

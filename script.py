@@ -1,233 +1,192 @@
-import tkinter as tk
-from tkinter import filedialog
-from tkinter import ttk
-import speech_recognition as sr
 import os
+import sys
+import ctypes
+import tkinter as tk
+from tkinter import filedialog, ttk, messagebox
 from pydub import AudioSegment
-from datetime import datetime
+import speech_recognition as sr
+import tempfile
 import threading
-import logging
+from datetime import datetime
+import time
 
-# Caminho base e configuração do ffmpeg
-caminho_da_pasta_base = os.path.join(os.path.dirname(__file__), "bin") 
-AudioSegment.ffmpeg = os.path.join(caminho_da_pasta_base, "ffmpeg.exe")
-AudioSegment.ffprobe = os.path.join(caminho_da_pasta_base, "ffprobe.exe")
+class TranscritorDeAudio:
+    def __init__(self, raiz):
+        self.raiz = raiz
+        self.raiz.title("Transcrição de Áudio")
+        self.raiz.geometry("500x400")
 
-# Configuração do logger
-registrador_de_logs = logging.getLogger(__name__)
-registrador_de_logs.setLevel(logging.DEBUG)
+        # Configurações iniciais
+        self.arquivo_audio = None
+        self.progresso = tk.IntVar()
 
-class ManipuladorDeTextoParaLog(logging.Handler):
-    """Handler personalizado para direcionar logs para um widget de texto do Tkinter."""
-    def __init__(self, widget_de_texto):
-        super().__init__()
-        self.widget_de_texto = widget_de_texto
+        # Layout
+        self.criar_componentes()
 
-    def emit(self, registro):
-        mensagem = self.format(registro)
-        self.widget_de_texto.after(0, self._adicionar_mensagem, mensagem)
+    def criar_componentes(self):
+        ttk.Label(self.raiz, text="Bem-vindo ao Transcritor de Áudio", font=("Arial", 14)).pack(pady=10)
 
-    def _adicionar_mensagem(self, mensagem):
-        self.widget_de_texto.configure(state='normal')
-        self.widget_de_texto.insert(tk.END, mensagem + '\n')
-        self.widget_de_texto.configure(state='disabled')
-        self.widget_de_texto.yview(tk.END)
+        self.botao_selecionar = ttk.Button(self.raiz, text="Selecionar Arquivo de Áudio", command=self.selecionar_audio)
+        self.botao_selecionar.pack(pady=5)
 
-# Função para abrir a janela de seleção de arquivo de áudio
-def selecionar_arquivo_de_audio(raiz):
-    arquivo_de_audio = filedialog.askopenfilename(
-        title="Selecione um arquivo de áudio",
-        filetypes=[("Arquivos de Áudio", "*.mp3;*.wav;*.flac")],
-    )
-    if not arquivo_de_audio:
-        raiz.quit()  # Fecha a aplicação caso o usuário cancele
-    return arquivo_de_audio
+        self.botao_iniciar = ttk.Button(self.raiz, text="Iniciar Transcrição", command=self.iniciar_transcricao, state="disabled")
+        self.botao_iniciar.pack(pady=5)
 
-# Função para abrir a janela de seleção da pasta de destino
-def selecionar_pasta_de_destino(raiz):
-    pasta_de_destino = filedialog.askdirectory(title="Selecione a pasta de destino")
-    if not pasta_de_destino:
-        raiz.quit()  # Fecha a aplicação caso o usuário cancele
-    return pasta_de_destino
+        self.barra_progresso = ttk.Progressbar(self.raiz, orient="horizontal", length=400, mode="determinate", variable=self.progresso)
+        self.barra_progresso.pack(pady=10)
 
-# Função para atualizar o progresso
-def atualizar_progresso(barra_de_progresso, progresso, texto_de_status, texto):
-    barra_de_progresso["value"] = progresso
-    texto_de_status.config(text=texto)
-    texto_de_status.update()
+        self.rotulo_status = ttk.Label(self.raiz, text="Status: Aguardando arquivo.")
+        self.rotulo_status.pack(pady=10)
 
-# Função para reiniciar a transcrição
-def reiniciar_transcricao(janela_de_progresso, barra_de_progresso, texto_de_status, texto_do_log, raiz):
-    # Limpar o conteúdo dos widgets
-    texto_do_log.delete("1.0", tk.END)  # Usando texto_do_log aqui
-    barra_de_progresso["value"] = 0
-    texto_de_status.config(text="")
+        self.texto_detalhes = tk.Text(self.raiz, wrap="word", height=10, width=60, state="disabled")
+        self.texto_detalhes.pack(pady=5)
 
-    # Reiniciar a transcrição
-    caminho_do_audio = selecionar_arquivo_de_audio(raiz)
-    if caminho_do_audio:
-        iniciar_transcricao(caminho_do_audio, janela_de_progresso, barra_de_progresso, texto_de_status, texto_do_log, raiz)  # Passando todos os parâmetros
-    else:
-        registrador_de_logs.info("Nenhum arquivo foi selecionado. Encerrando o programa.")
-        raiz.quit()  # Fecha a aplicação caso o usuário cancele a seleção
+    def registrar_detalhes(self, mensagem):
+        """Atualiza a área de detalhes na interface com novas mensagens."""
+        self.texto_detalhes.configure(state="normal")
+        self.texto_detalhes.insert(tk.END, mensagem + "\n")
+        self.texto_detalhes.see(tk.END)  # Rola para o final
+        self.texto_detalhes.configure(state="disabled")
 
-def converter_para_wav(caminho_do_audio, barra_de_progresso=None, texto_de_status=None):
-    if caminho_do_audio.endswith(".mp3"):
-        try:
-            audio = AudioSegment.from_mp3(caminho_do_audio)
-            caminho_do_audio_wav = caminho_do_audio.replace(".mp3", ".wav")
-            audio.export(caminho_do_audio_wav, format="wav")
-
-            if barra_de_progresso and texto_de_status:
-                atualizar_progresso(barra_de_progresso, 50, texto_de_status, "Conversão de arquivo para WAV concluída")
-
-            registrador_de_logs.info(f"Arquivo MP3 convertido para: {caminho_do_audio_wav}")
-            return caminho_do_audio_wav
-        except Exception as e:
-            registrador_de_logs.error(f"Erro ao converter áudio para WAV: {e}")
-            raise
-    elif caminho_do_audio.endswith(".wav"):
-        return caminho_do_audio
-    else:
-        registrador_de_logs.error("Formato de áudio não suportado. Por favor, forneça um arquivo .mp3 ou .wav.")
-        raise ValueError("Formato de áudio não suportado.")
-
-def converter_audio_para_texto_com_timestamps(caminho_do_audio, caminho_para_arquivo_de_texto_de_saida, janela_de_progresso, barra_de_progresso, texto_de_status, texto_do_log, raiz):
-    reconhecedor_de_fala = sr.Recognizer()
-
-    caminho_do_audio = converter_para_wav(caminho_do_audio, barra_de_progresso, texto_de_status)
-
-    audio = AudioSegment.from_wav(caminho_do_audio)
-    duracao_do_segmento_em_milisegundos = 60000  
-    duracao_total_em_milisegundos = len(audio)
-    numero_de_segmentos = duracao_total_em_milisegundos // duracao_do_segmento_em_milisegundos
-
-    timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M")  # Formato recomendado
-    pasta_dos_segmentos = f"segmentos_{timestamp}"
-    os.makedirs(pasta_dos_segmentos, exist_ok=True)
-
-    texto_completo = ""
-    atualizar_progresso(barra_de_progresso, 0, texto_de_status, "Iniciando transcrição...")
-
-    for i in range(numero_de_segmentos + 1):
-        inicio_em_milisegundos = i * duracao_do_segmento_em_milisegundos
-        fim_em_milisegundos = min(inicio_em_milisegundos + duracao_do_segmento_em_milisegundos, duracao_total_em_milisegundos)
-        segmento_do_audio = audio[inicio_em_milisegundos:fim_em_milisegundos]
-
-        caminho_do_segmento_wav = os.path.join(pasta_dos_segmentos, f"segmento_{i}.wav")
-        segmento_do_audio.export(caminho_do_segmento_wav, format="wav")
-
-        with sr.AudioFile(caminho_do_segmento_wav) as fonte:
-            dados_de_audio = reconhecedor_de_fala.record(fonte)
-
-        try:
-            texto_do_segmento = reconhecedor_de_fala.recognize_google(dados_de_audio, language='pt-BR')
-            timestamp_inicio = f"{inicio_em_milisegundos // 60000:02}:{(inicio_em_milisegundos // 1000) % 60:02}"
-            timestamp_fim = f"{fim_em_milisegundos // 60000:02}:{(fim_em_milisegundos // 1000) % 60:02}"
-            texto_completo += f"[{timestamp_inicio} - {timestamp_fim}] {texto_do_segmento}\n\n"
-            registrador_de_logs.info(f"Segmento {i + 1} transcrito com sucesso.")
-        except sr.UnknownValueError:
-            registrador_de_logs.warning(f"O Google Speech Recognition não conseguiu entender o áudio no segmento {i + 1}.")
-        except sr.RequestError as erro:
-            registrador_de_logs.error(f"Erro ao tentar se conectar ao Google Speech Recognition no segmento {i + 1}; {erro}")
-
-        progresso = ((i + 1) / (numero_de_segmentos + 1)) * 100
-        atualizar_progresso(barra_de_progresso, progresso, texto_de_status, f"Transcrevendo segmento {i + 1} de {numero_de_segmentos + 1}...")
-
-        if(progresso == 100):
-            atualizar_progresso(barra_de_progresso, progresso, texto_de_status, "Transcrição concluída.")
-
-        os.remove(caminho_do_segmento_wav)
-
-    # Usando o método `after()` para chamar a janela de diálogo na thread principal
-    def salvar_arquivo():
-        caminho_para_arquivo_de_texto_de_saida = filedialog.asksaveasfilename(
-            defaultextension=".txt",
-            filetypes=[("Arquivos de Texto", "*.txt")],
-            title="Salvar Transcrição",
-            initialfile=f"transcricao_{timestamp}.txt"
+    def selecionar_audio(self):
+        self.arquivo_audio = filedialog.askopenfilename(
+            title="Selecione um arquivo de áudio",
+            filetypes=[("Arquivos de Áudio", "*.mp3;*.wav;*.flac")]
         )
 
-        if caminho_para_arquivo_de_texto_de_saida:
-            with open(caminho_para_arquivo_de_texto_de_saida, "w", encoding="utf-8") as arquivo:
-                arquivo.write(texto_completo)
-            registrador_de_logs.info(f"Transcrição salva em: {caminho_para_arquivo_de_texto_de_saida}")
+        if self.arquivo_audio:
+            self.rotulo_status.config(text=f"Arquivo selecionado: {os.path.basename(self.arquivo_audio)}")
+            self.botao_iniciar.config(state="normal")
         else:
-            registrador_de_logs.warning("Nenhum local foi selecionado para salvar o arquivo de transcrição.")
+            self.rotulo_status.config(text="Nenhum arquivo selecionado.")
 
-        os.rmdir(pasta_dos_segmentos)
-        janela_de_progresso.update_idletasks()
+    def iniciar_transcricao(self):
+        if not self.arquivo_audio:
+            messagebox.showerror("Erro", "Nenhum arquivo selecionado.")
+            return
 
-    # Agendar a função salvar_arquivo para ser chamada na thread principal
-    janela_de_progresso.after(0, salvar_arquivo)
+        self.botao_iniciar.config(state="disabled")
+        self.rotulo_status.config(text="Iniciando transcrição...")
+        self.registrar_detalhes("Iniciando transcrição do arquivo...")
+        threading.Thread(target=self.transcrever_audio).start()
 
+    def transcrever_audio(self):
+        try:
+            inicio = time.time()
+            self.progresso.set(0)
+            arquivo_wav = self.converter_para_wav(self.arquivo_audio)
+            self.registrar_detalhes(f"Arquivo WAV gerado: {arquivo_wav}")
+            transcricao = self.converter_audio_para_texto(arquivo_wav)
+            self.salvar_transcricao(transcricao)
+            tempo_decorrido = time.time() - inicio
+            self.rotulo_status.config(text="Transcrição concluída!")
+            self.registrar_detalhes(f"Transcrição concluída em {tempo_decorrido:.2f} segundos.")
+        except Exception as e:
+            self.registrar_detalhes(f"Erro durante a transcrição: {e}")
+            self.rotulo_status.config(text="Erro durante a transcrição.")
+            messagebox.showerror("Erro", f"Falha na transcrição: {e}")
+        finally:
+            self.botao_iniciar.config(state="normal")
 
-# Função para iniciar a transcrição em uma thread separada
-def iniciar_transcricao(caminho_do_audio, janela_de_progresso=None, barra_de_progresso=None, texto_de_status=None, texto_do_log=None, raiz=None):
-    if janela_de_progresso:
-        # Limpar o log existente e resetar a barra de progresso
-        if texto_do_log:
-            texto_do_log.delete("1.0", tk.END)
-        if barra_de_progresso:
-            barra_de_progresso["value"] = 0
+    def converter_para_wav(self, arquivo_audio):
+        self.registrar_detalhes("Convertendo o arquivo para WAV...")
+        try:
+            pasta_wav = os.path.join(os.getcwd(), "wav")
+            if not os.path.exists(pasta_wav):
+                os.makedirs(pasta_wav)
+
+            caminho_saida_wav = os.path.join(pasta_wav, f"{os.path.splitext(os.path.basename(arquivo_audio))[0]}.wav")
+            if arquivo_audio.lower().endswith(".mp3"):
+                audio = AudioSegment.from_mp3(arquivo_audio)
+                audio.export(caminho_saida_wav, format="wav")
+                self.registrar_detalhes("Conversão concluída para WAV.")
+                return caminho_saida_wav
+            elif arquivo_audio.lower().endswith(".wav"):
+                self.registrar_detalhes("O arquivo já está em formato WAV.")
+                return arquivo_audio
+            else:
+                raise ValueError("Formato de áudio não suportado. Use .mp3 ou .wav.")
+        except Exception as e:
+            self.registrar_detalhes(f"Erro ao converter para WAV: {e}")
+            raise
+
+    def converter_audio_para_texto(self, arquivo_audio):
+        self.registrar_detalhes("Iniciando divisão do áudio em segmentos fixos...")
+        reconhecedor = sr.Recognizer()
+        audio = AudioSegment.from_wav(arquivo_audio)
+
+        duracao_segmento = 60000  # 1 minuto em milissegundos
+        duracao_total = len(audio)
+        transcricao = []
+
+        for inicio in range(0, duracao_total, duracao_segmento):
+            fim = min(inicio + duracao_segmento, duracao_total)
+            segmento = audio[inicio:fim]
+
+            self.registrar_detalhes(f"Processando segmento de {inicio // 1000}s a {fim // 1000}s...")
+            caminho_segmento = os.path.join(os.getcwd(), f"segmento_{inicio // 1000}_{fim // 1000}.wav")
+            
+            try:
+                segmento.export(caminho_segmento, format="wav")
+                self.registrar_detalhes(f"Segmento exportado para {caminho_segmento}")
+
+                with sr.AudioFile(caminho_segmento) as fonte:
+                    dados = reconhecedor.record(fonte)
+                    texto = reconhecedor.recognize_google(dados, language="pt-BR")
+                    transcricao.append(f"[{inicio // 1000}s - {fim // 1000}s]:\n{texto}\n")
+                    self.registrar_detalhes(f"Segmento de {inicio // 1000}s a {fim // 1000}s transcrito com sucesso.")
+            except sr.UnknownValueError:
+                transcricao.append(f"[{inicio // 1000}s - {fim // 1000}s]:\n[INAUDÍVEL]\n")
+                self.registrar_detalhes(f"Segmento de {inicio // 1000}s a {fim // 1000}s marcado como inaudível.")
+            except sr.RequestError as e:
+                self.registrar_detalhes(f"Erro na API de transcrição: {e}")
+                raise
+            except Exception as e:
+                self.registrar_detalhes(f"Erro inesperado no segmento: {e}")
+                raise
+            finally:
+                if os.path.exists(caminho_segmento):
+                    os.unlink(caminho_segmento)  # Remove o arquivo temporário
+
+            # Atualiza a barra de progresso
+            progresso_percentual = int(((fim) / duracao_total) * 100)
+            self.progresso.set(progresso_percentual)
+
+        return "".join(transcricao)
+
+    def salvar_transcricao(self, transcricao):
+        self.registrar_detalhes("Salvando transcrição...")
+
+        # Perguntar ao usuário se deseja escolher o diretório
+        if messagebox.askyesno("Salvar Arquivo", "Deseja escolher o local para salvar o arquivo?"):
+            caminho_salvar = filedialog.asksaveasfilename(
+                defaultextension=".txt",
+                filetypes=[("Arquivos de Texto", "*.txt")],
+                title="Salvar Transcrição",
+                initialfile=f"transcricao_{datetime.now().strftime('%Y-%m-%d_%H-%M')}.txt"
+            )
+        else:
+            pasta_transcricoes = os.path.join(os.getcwd(), "transcricoes")
+            if not os.path.exists(pasta_transcricoes):
+                os.makedirs(pasta_transcricoes)
+            caminho_salvar = os.path.join(pasta_transcricoes, f"transcricao_{datetime.now().strftime('%Y-%m-%d_%H-%M')}.txt")
+
+        if caminho_salvar:
+            with open(caminho_salvar, "w", encoding="utf-8") as arquivo:
+                arquivo.write(transcricao)
+            messagebox.showinfo("Sucesso", f"Transcrição salva em: {caminho_salvar}")
+            self.registrar_detalhes(f"Transcrição salva em: {caminho_salvar}")
+        else:
+            messagebox.showinfo("Cancelado", "A transcrição não foi salva.")
+            self.registrar_detalhes("O usuário cancelou o salvamento da transcrição.")
+
+if __name__ == "__main__":
+    if os.name == "nt":
+        ctypes.windll.kernel32.FreeConsole()  # Oculta o terminal
+
+    if os.name == "nt" and not ctypes.windll.shell32.IsUserAnAdmin():
+        ctypes.windll.shell32.ShellExecuteW(None, "runas", sys.executable, " ".join(sys.argv), None, 1)
     else:
-        # Criação da janela de progresso se for a primeira vez
-        janela_de_progresso = tk.Tk()
-        janela_de_progresso.title("Progresso da Transcrição")
-        botao_nova_transcricao = tk.Button(janela_de_progresso, text="Iniciar nova transcrição", 
-                                            command=lambda: reiniciar_transcricao(janela_de_progresso, barra_de_progresso, texto_de_status, texto_do_log, raiz))  # Passando os parâmetros necessários
-        botao_nova_transcricao.pack(pady=10)
-
-        barra_de_progresso = ttk.Progressbar(janela_de_progresso, length=300, mode="determinate", maximum=100)
-        barra_de_progresso.pack(pady=10)
-
-        texto_de_status = tk.Label(janela_de_progresso, text="")
-        texto_de_status.pack(pady=10)
-
-        quadro_do_log = tk.Frame(janela_de_progresso)
-        quadro_do_log.pack(pady=10)
-
-        etiqueta_do_log = tk.Label(quadro_do_log, text="Log de Progresso:")
-        etiqueta_do_log.pack(anchor="w")
-
-        texto_do_log = tk.Text(quadro_do_log, height=10, width=50)
-        texto_do_log.pack()
-
-        # Configuração do Handler para exibir logs sem data e hora
-        manipulador_de_log = ManipuladorDeTextoParaLog(texto_do_log)
-        manipulador_de_log.setFormatter(logging.Formatter('%(message)s'))  # Exibe apenas a mensagem, sem data e hora
-        registrador_de_logs.addHandler(manipulador_de_log)
-
-        iniciar_transcricao.janela_de_progresso = janela_de_progresso  # Armazena a janela para reutilização
-
-    thread_de_transcricao = threading.Thread(
-        target=converter_audio_para_texto_com_timestamps,
-        args=(caminho_do_audio, None, janela_de_progresso, barra_de_progresso, texto_de_status, texto_do_log, raiz)  # Passando todos os parâmetros
-    )
-    thread_de_transcricao.daemon = True  # Define a thread como daemon
-    thread_de_transcricao.start()
-
-    # Manipulador do evento de fechamento da janela principal
-    def fechar_programa():
-        if thread_de_transcricao.is_alive():
-            registrador_de_logs.info("A transcrição foi interrompida.")
-        raiz.quit()
-        raiz.destroy()
-        janela_de_progresso.quit()
-        janela_de_progresso.destroy()
-
-    raiz.protocol("WM_DELETE_WINDOW", fechar_programa)
-
-    janela_de_progresso.mainloop()
-
-# Seleção de arquivo e início do processo
-raiz = tk.Tk()
-raiz.withdraw()  # Mantém a janela principal oculta
-
-caminho_do_audio = selecionar_arquivo_de_audio(raiz)
-
-if caminho_do_audio:
-    iniciar_transcricao(caminho_do_audio, raiz=raiz)
-else:
-    registrador_de_logs.info("Nenhum arquivo foi selecionado. Encerrando o programa.")
-    raiz.quit()  # Garante que o programa será fechado
+        raiz = tk.Tk()
+        app = TranscritorDeAudio(raiz)
+        raiz.mainloop()

@@ -1,110 +1,118 @@
-# Conversor de Áudio para Texto com Timestamps
+# Transcritor de Áudio do Alequinho
 
-Este projeto é um aplicativo Python com interface gráfica (GUI) baseado em Tkinter para converter arquivos de áudio (MP3 e WAV) em texto, incluindo timestamps, utilizando o Google Speech Recognition.
+## Descrição
+Este é um aplicativo para transcrição de áudio que utiliza a biblioteca `SpeechRecognition` para converter arquivos de áudio em texto. O aplicativo permite que o usuário selecione um arquivo de áudio (`.mp3`, `.wav`, `.flac`), o converta para o formato `.wav` (se necessário) e faça a transcrição utilizando a API de reconhecimento de voz do Google.
+
+A interface gráfica foi criada usando `Tkinter` para proporcionar uma experiência amigável ao usuário.
+
+---
 
 ## Funcionalidades
-
-- Suporte a arquivos MP3 e WAV.
-- Conversão de áudio para texto com marcação de tempo (timestamps).
-- Exibição do progresso da transcrição em uma barra de progresso.
-- Log em tempo real exibido na interface gráfica.
-- Salvamento do texto transcrito em um arquivo .txt.
+- Selecionar um arquivo de áudio.
+- Conversão automática para o formato `.wav`, caso necessário.
+- Transcrição do áudio em segmentos de 1 minuto.
+- Barra de progresso para acompanhar o progresso da transcrição.
+- Salvar a transcrição em um arquivo `.txt` no diretório desejado ou na pasta padrão `transcricoes`.
 
 ---
 
 ## Requisitos
 
-Certifique-se de ter os seguintes itens instalados:
+Certifique-se de ter as seguintes dependências instaladas no ambiente:
 
-- Python 3.10 ou superior
-- Pip (gerenciador de pacotes do Python)
-
-### Bibliotecas Necessárias
-
-As bibliotecas usadas no projeto podem ser instaladas via `pip`. Execute o seguinte comando para instalar todas as dependências:
-
-```bash
-pip install -r requirements.txt
-```
-
-Conteúdo do arquivo `requirements.txt`:
-```plaintext
-speechrecognition
-ffmpeg-python
-tk
-```
+- Python 3.8+
+- Bibliotecas Python:
+  ```
+  pydub
+  SpeechRecognition
+  ffmpeg-python
+  ```
+- **FFmpeg** instalado e configurado no sistema:
+  - Adicione o caminho do executável `ffmpeg` ao PATH do sistema operacional.
+  - Ou configure o caminho diretamente no script:
+    ```python
+    from pydub import AudioSegment
+    AudioSegment.ffmpeg = r"caminho_para_ffmpeg/ffmpeg.exe"
+    ```
 
 ---
 
-## Instalação e Configuração
+## Instalação
 
-1. **Clone o repositório**:
-
+1. **Clone ou Baixe o Repositório**:
    ```bash
-   git clone <URL_DO_REPOSITORIO>
-   cd <PASTA_DO_PROJETO>
+   git clone https://github.com/seu-repositorio/transcritor-audio.git
+   cd transcritor-audio
    ```
 
-2. **Instale os pacotes necessários**:
+2. **Crie um Ambiente Virtual (Opcional):**
+   ```bash
+   python -m venv venv
+   source venv/bin/activate  # Linux/Mac
+   venv\Scripts\activate  # Windows
+   ```
 
+3. **Instale as Dependências:**
    ```bash
    pip install -r requirements.txt
    ```
 
-3. **Certifique-se de que o FFmpeg está instalado no sistema**:
-   
-   - Baixe o FFmpeg [aqui](https://ffmpeg.org/download.html).
-   - Siga as instruções para adicionar o executável do FFmpeg ao PATH do sistema.
-   
-   Para verificar se o FFmpeg está corretamente configurado, execute:
-   ```bash
-   ffmpeg -version
-   ```
+4. **Certifique-se de que o FFmpeg está Instalado:**
+   - [Instruções para instalação do FFmpeg](https://ffmpeg.org/download.html)
 
 ---
 
 ## Como Usar
 
-1. **Execute o script**:
-
+1. Execute o script Python:
    ```bash
    python script.py
    ```
 
-2. **Selecione um arquivo de áudio**:
-   - Uma janela será exibida para você escolher um arquivo MP3 ou WAV.
+2. Na interface gráfica:
+   - Clique em **Selecionar Arquivo de Áudio** e escolha o arquivo desejado.
+   - Clique em **Iniciar Transcrição** para começar o processo.
+   - Acompanhe o progresso na barra e nos detalhes exibidos.
 
-3. **Acompanhe o progresso**:
-   - O progresso da transcrição será exibido em uma nova janela com uma barra de progresso e logs em tempo real.
-
-4. **Aguarde a finalização**:
-   - Ao término, o texto transcrito será salvo em um arquivo `.txt` na mesma pasta do script, com o nome baseado na data e hora atuais.
-
----
-
-## Estrutura do Código
-
-- **GUI com Tkinter**: Interface gráfica para seleção de arquivos e exibição do progresso.
-- **Threading**: Transcrição executada em segundo plano para manter a interface responsiva.
-- **Logs**: Log personalizado exibido na interface.
-- **Conversão de Áudio**: Utiliza `ffmpeg-python` para converter MP3 em WAV, caso necessário.
-- **Reconhecimento de Voz**: Utiliza `SpeechRecognition` com o Google Speech API.
+3. Após a transcrição:
+   - Escolha salvar o arquivo `.txt` em um local específico ou na pasta padrão `transcricoes`.
 
 ---
 
-## Possíveis Erros e Soluções
+## Estrutura de Diretórios
 
-1. **Erro: `ffmpeg not found`**:
-   - Certifique-se de que o FFmpeg está instalado e configurado no PATH do sistema.
+Após executar o programa, a seguinte estrutura de diretórios será criada automaticamente:
 
-2. **Erro: `Google Speech Recognition não conseguiu entender o áudio`**:
-   - O áudio pode estar em má qualidade ou conter ruídos excessivos. Tente um arquivo com melhor qualidade.
-
-3. **Erro: `Connection error with Google Speech API`**:
-   - Verifique sua conexão com a internet.
+```
+projeto/
+|-- script.py
+|-- requirements.txt
+|-- wav/               # Contém arquivos WAV convertidos
+|-- transcricoes/      # Contém transcrições salvas em .txt
+```
 
 ---
 
-## Contribuições
+## Contribuição
 
-Sinta-se à vontade para abrir issues ou pull requests caso encontre bugs ou tenha sugestões de melhorias.
+1. Faça um fork do repositório.
+2. Crie uma branch para sua feature ou correção de bug:
+   ```bash
+   git checkout -b minha-feature
+   ```
+3. Faça commit das suas alterações:
+   ```bash
+   git commit -m 'Adiciona nova feature'
+   ```
+4. Faça push para a branch:
+   ```bash
+   git push origin minha-feature
+   ```
+5. Abra um Pull Request.
+
+---
+
+## Licença
+
+Este projeto está licenciado sob a [Licença MIT](LICENSE).
+

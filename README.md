@@ -1,3 +1,6 @@
+# Download do executável
+Nesse [link](https://mega.nz/file/dkpWVCxZ#d2tAbnU-uMFmZVCBO-UP8VsKAPPm1M8X2z9xSqX1FEE) eu disponibilizei para baixa-lo e utililizar no Windows.
+
 # Transcritor de Áudio do Alequinho
 
 ## Descrição
